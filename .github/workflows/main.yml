@@ -1,5 +1,10 @@
 name: CI
 
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
 on:
     pull_request:
       types: [closed]
@@ -9,15 +14,32 @@ on:
 
 jobs:
   generate_changelog:
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: cgos-local-linux
     name: Generate changelog for master branch
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Install changelog generator
+        run: gem install github_changelog_generator --version 1.16.2 --user-install --no-document
 
       - name: Generate changelog
-        uses: charmixer/auto-changelog-action@v1
-        with:
-          token: ${{secrets.GITHUB_TOKEN}}
+        env:
+          CHANGELOG_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gem_bin="$(ruby -e 'print Gem.user_dir')/bin"
+          "$gem_bin/github_changelog_generator" \
+            --user bygiro \
+            --project pwa-auth \
+            --release-branch master \
+            --output CHANGELOG.md
 
       - name: Commit files
         env:
@@ -26,11 +48,10 @@ jobs:
         run: |
           git config --local user.email "$CI_EMAIL"
           git config --local user.name "$CI_USER"
-          git add CHANGELOG.md && git commit -m 'Updated CHANGELOG.md' && echo ::set-env name=push::1 || echo "No changes to CHANGELOG.md"
-      - name: Push changes
-        if: env.push == 1
-        env:
-          CI_USER: jgw96
-          CI_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        run: |
-          git push "https://$CI_USER:$CI_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:master
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changes to CHANGELOG.md"
+          else
+            git commit -m 'Updated CHANGELOG.md'
+            git push origin HEAD:master
+          fi
