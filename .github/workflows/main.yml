@@ -6,19 +6,10 @@ permissions:
   pull-requests: read
 
 on:
-    pull_request:
-      types: [closed]
-    
-    release:
-      types: [published]
+  workflow_dispatch:
 
 jobs:
   generate_changelog:
-    if: >-
-      github.event_name == 'release' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true &&
-       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     name: Generate changelog for master branch
     steps:
